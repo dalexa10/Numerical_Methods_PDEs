@@ -4,6 +4,11 @@ import matplotlib.pyplot as plt
 import pickle
 import os
 
+# ----------------------------------------------------------------
+#                          Section One
+# ---------------------------------------------------------------
+# Read files generated in burgers_equation.py 
+
 files = os.listdir('results/')
 temp_file = {}
 
@@ -19,7 +24,18 @@ for k, v in temp_file.items():
     globals()[k] = v
     # del temp_file, file_name, file
 
-#%%
+    
+    
+#%% 
+
+# ----------------------------------------------------------------
+#                           Section Two
+# ----------------------------------------------------------------
+# Visualization
+# Plot some obtained results 
+
+# For other results, you need to generate the files first  
+
 
 fig0, ax = plt.subplots(2, 2)
 plt.rcParams.update({'font.size': 16})
