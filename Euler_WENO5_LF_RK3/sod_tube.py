@@ -49,16 +49,6 @@ def flux_fun(u_vec):
 # -----------------------------------------------------
 #               Numerical functions
 # -----------------------------------------------------
-def add_spatial_ghost_cells(x, p, hx):
-    """ Add left and right ghost cells to the 1D mesh
-    The number of ghost cells depends on the polynomial order for
-    reconstruction """
-    start_x = np.array([x[0] - p_i * hx for p_i in range(1, p)])
-    end_x = np.array([x[-1] + p_i * hx for p_i in range(1, p)])
-    x = np.insert(x, 0, start_x)
-    x = np.insert(x, -1, end_x)
-    return x
-
 def compute_eigenvalues(u_vec, gam=7/5):
     """ Compute the eigenvalues of the mass matrix of the hyperbolic system
     of the 1D Euler equations """
@@ -259,8 +249,6 @@ if __name__ == '__main__':
     #               Processing
     # --------------------------------------
     x, hx = np.linspace(0, 1, nx, endpoint=True, retstep=True)
-    # x = add_spatial_ghost_cells(x, p, hx)
-    # nx = x.shape[0]
     u_vec, P_vec = initial_fun(x)
     l_v = compute_eigenvalues(u_vec)
     max_l_0 = compute_lambda_max(l_v)
