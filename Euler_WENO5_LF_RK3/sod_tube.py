@@ -1,4 +1,5 @@
 __author__ = 'Dario Rodriguez'
+__author__ = 'Elena Fernandez'
 
 import numpy as np
 
