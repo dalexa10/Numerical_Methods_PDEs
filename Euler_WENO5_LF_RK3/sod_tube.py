@@ -2,6 +2,7 @@ __author__ = 'Dario Rodriguez'
 __author__ = 'Elena Fernandez'
 
 import numpy as np
+from scipy.optimize import fsolve
 
 # -----------------------------------------------------
 #               Thermodynamic functions
@@ -59,6 +60,91 @@ def right_BC():
     u_r = np.array([rho, rho_u, E]).reshape([-1, 1])
     return u_r
 
+
+# -----------------------------------------------------
+#                   Exact Solution
+#                   Sod's Problem
+# -----------------------------------------------------
+def pressureEqn(p2p1, p4p1, g, a1a4):
+    num = (g - 1) * a1a4 * (p2p1 - 1)
+    den = np.sqrt(2 * g * (2 * g + (g + 1) * (p2p1 - 1)))
+    powterm = np.power(1 - num / den, -2 * g / (g - 1))
+    return p2p1 * powterm - p4p1
+
+def Sod_Exact_solution(x, T, gam=7/5):
+    """
+    Sod's problem has 4 zones:
+        Lelft BC [4] Expansion [3] Contact surface [2] Shock [1] Right BC
+    """
+    # Left boundary condition
+    rho4, rho_u4, E4 = left_BC()
+    u4 = rho_u4 / rho4
+    p4 = compute_pressure(rho4, rho_u4, E4)
+
+    # Right boundary condition
+    rho1, rho_u1, E1 = right_BC()
+    u1 = rho_u1 / rho1
+    p1 = compute_pressure(rho1, rho_u1, E1)
+
+    x0 = 0.5
+    gpm = (gam + 1) / (gam - 1)
+    p4p1 = p4 / p1                    # Left / right pressure ratio
+    a4 = np.sqrt(gam * p4 / rho4)   # Left speed of sound
+    a1 = np.sqrt(gam * p1 / rho1)   # Right speed of sound
+    a4a1 = a4/a1                    # Ratio of the speed of sounds
+
+    p2p1 = fsolve(pressureEqn, 1.0, args=(p4p1, gam, 1.0 / a4a1))[0]  # This gives the pressure ratio of the shock
+    ushock = a1 * np.sqrt((gam + 1) / (2 * gam) * (p2p1 - 1) + 1)
+
+    # Region between shock and contact surface
+    p2 = p2p1 * p1
+    rho2rho1 = (1 + gpm * p2p1) / (gpm + p2p1)
+    rho2 = rho2rho1 * rho1
+    u2 = a1 / gam * (p2p1 - 1) * np.sqrt(((2 * gam) / (gam + 1)) / (p2p1 + 1.0/gpm))
+
+    # Expansion wave
+    p3p4 = p2p1 / p4p1
+    p3 = p3p4 * p4
+    rho3rho4 = np.power(p3p4, 1 / gam)
+    rho3 = rho3rho4 * rho4
+    u3 = u2     # Velocity is unchanged across the contact surface
+
+    # Regions are based on time
+    x1 = x0 - a4 * T            # Location of the left part of the expansion fan
+    a3 = np.sqrt(gam * p3 / rho3)
+    x2 = x0 + (u3 - a3) * T     # Location of the right part of the expansion fan
+    x3 = x0 + u2 * T            # Location of the contact surface
+    x4 = x0 + ushock * T        # Location of the shock wave
+
+    # Expansion region
+    u_vec = np.zeros((3, len(x)))
+    for i in np.arange(0, len(x)):
+        x_i = x[i]
+        if x_i <= x1:               # Left region
+            u_vec[0, i] = rho4
+            u_vec[1, i] = rho4 * u4
+            u_vec[2, i] = p4 / (gam - 1) + rho4 * np.power(u4, 2.0) / 2
+        elif x_i > x1 and x_i <= x2:    # Expansion fan
+            u = 2 / (gam + 1) * (a4 + (x_i - x0) / T)
+            p = p4 * np.power(1 - (gam - 1) / 2 * (u/a4), (2 * gam) / (gam - 1))
+            rho = rho4 * np.power(1 - (gam - 1) / 2 * (u/a4), 2 / (gam - 1))
+            u_vec[0, i] = rho
+            u_vec[1, i] = rho*u
+            u_vec[2, i] = p / (gam - 1) + rho * np.power(u, 2.0) / 2
+        elif x_i > x2 and x_i <= x3: # Between the expansion and contact surface
+            u_vec[0, i] = rho3
+            u_vec[1, i] = rho3 * u3
+            u_vec[2, i] = p3 / (gam - 1) + rho3 * np.power(u3, 2.0) / 2
+        elif x_i > x3 and x_i <= x4: # Between the contact surface and the shock
+            u_vec[0, i] = rho2
+            u_vec[1, i] = rho2 * u2
+            u_vec[2, i] = p2 / (gam - 1) + rho2 * np.power(u2, 2.0) / 2
+        elif x_i > x4: # The right region
+            u_vec[0, i] = rho1
+            u_vec[1, i] = rho1 * u1
+            u_vec[2, i] = p1 / (gam - 1) + rho1 * np.power(u1, 2.0) / 2
+
+    return u_vec
 
 # -----------------------------------------------------
 #     Coefficients for WENO squeme for p = 2 & p = 3
@@ -309,11 +395,14 @@ if __name__ == '__main__':
         max_l = compute_lambda_max(l_v)
         ht = CFL * hx / max_l
 
+    u_vec_ex = Sod_Exact_solution(x, T)
+
     fig, ax = plt.subplots(2, 2)
     plt.tight_layout()
 
-    ax[0, 0].plot(x, u_vec[0, :], c='b', label='T = {}'.format(str(T)))
     ax[0, 0].plot(x, u_vec_0[0, :], c='g', label='T = {}'.format(0))
+    ax[0, 0].plot(x, u_vec_ex[0, :], c='r', label='T = {}'.format(str(T)))
+    ax[0, 0].plot(x, u_vec[0, :], c='b', ls='--', label='T = {}'.format(str(T)))
     ax[0, 0].set_ylabel(r'$\rho$')
 
     ax[0, 1].plot(x, u_vec[1, :] / u_vec[0, :], c='b', label='T = {}'.format(str(T)))
