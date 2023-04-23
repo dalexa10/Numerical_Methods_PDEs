@@ -3,6 +3,7 @@ __author__ = 'Elena Fernandez'
 
 import numpy as np
 from scipy.optimize import fsolve
+from sklearn.metrics import mean_squared_error
 
 # -----------------------------------------------------
 #               Thermodynamic functions
@@ -429,6 +430,15 @@ def get_mark(k):
         m = 's'
     return m
 
+def compute_error(u_num, u_exact, hx):
+    """ Compute the L2 norm of the error """
+    # error = u_num - u_exact
+    # l2err = np.sqrt(hx * np.sum(error**2, axis=1))
+    mse = [mean_squared_error(u_exact[0, :], u_num[0, :]),
+           mean_squared_error(u_exact[1, :], u_num[1, :]),
+           mean_squared_error(u_exact[2, :], u_num[2, :])]
+    return mse
+
 
 if __name__ == '__main__':
 
@@ -449,6 +459,7 @@ if __name__ == '__main__':
     #               Processing
     # --------------------------------------
     out = {}
+    error_dict = {}
 
     for nx in nx_ls:
         x, hx = np.linspace(0, 1, nx, endpoint=True, retstep=True)
@@ -476,9 +487,23 @@ if __name__ == '__main__':
         p_w5 = 3  # Degree of interpolating polynomial
         p_w3 = 2  # Degree of interpolating polynomial
 
+        k1 = str(nx) + '_' + str(p_w5)
+        k2 = str(nx) + '_' + str(p_w3)
+
+        error_dict[k1] = {'t': [], 'e': [[], [], []]}
+        error_dict[k2] = {'t': [], 'e': [[], [], []]}
+
         while t_c < T:
-            # Tensor update
+            # Numerical tensor update
             u_vec, P_vec = RK3_Integration(u_vec, ht, p_w5, eps)
+
+            # Exact solution
+            u_vec_ex = Sod_Exact_solution(x, ht)
+
+            # Error calculation
+            e_i = compute_error(u_vec, u_vec_ex, hx)
+            [error_dict[k1]['e'][i].append(e_i[i]) for i in range(3)]
+            error_dict[k1]['t'].append(t_c)
 
             # Time update
             t_c += ht
@@ -488,7 +513,6 @@ if __name__ == '__main__':
             max_l = compute_lambda_max(l_v)
             ht = CFL * hx / max_l
 
-        k1 = str(nx) + '_' + str(p_w5)
         out[k1] = {'u': u_vec,
                    'P': P_vec,
                    'x': x}
@@ -496,6 +520,14 @@ if __name__ == '__main__':
         while t_c_2 < T:
             # Tensor update
             u_vec_2, P_vec_2 = RK2_Integration(u_vec_2, ht, p_w3, eps)
+
+            # Exact solution
+            u_vec_ex_2 = Sod_Exact_solution(x, ht)
+
+            # Error calculation
+            e_i_2 = compute_error(u_vec_2, u_vec_ex_2, hx)
+            [error_dict[k2]['e'][i].append(e_i_2[i]) for i in range(3)]
+            error_dict[k2]['t'].append(t_c_2)
 
             # Time update
             t_c_2 += ht_2
@@ -505,7 +537,6 @@ if __name__ == '__main__':
             max_l_2 = compute_lambda_max(l_v_2)
             ht_2 = CFL * hx / max_l_2
 
-        k2 = str(nx) + '_' + str(p_w3)
         out[k2] = {'u': u_vec_2,
                    'P': P_vec_2,
                    'x': x}
@@ -538,6 +569,24 @@ if __name__ == '__main__':
     ax[1, 0].set_ylabel('E', fontsize=16)
     ax[1, 1].legend(loc='best', fontsize=16)
     [ax[i, j].tick_params(labelsize=16) for i in range(2) for j in range(2)]
+
+
+    fig, ax = plt.subplots(1, 3)
+    plt.tight_layout()
+    for k in error_dict.keys():
+        ax[0].plot(error_dict[k]['t'], error_dict[k]['e'][0])
+        ax[1].plot(error_dict[k]['t'], error_dict[k]['e'][1])
+        ax[2].plot(error_dict[k]['t'], error_dict[k]['e'][2], label=r'$n_x$ = {} - p = {}'.format(k[:3], k[-1]))
+
+    ax[0].set_ylabel(r'$L_{2}$ error $\rho$', fontsize=16)
+    ax[1].set_ylabel(r'$L_{2}$ error $u$', fontsize=16)
+    ax[2].set_ylabel(r'$L_{2}$ error $E$', fontsize=16)
+
+    ax[0].set_xlabel('t', fontsize=16)
+    ax[1].set_xlabel('t', fontsize=16)
+    ax[1].set_xlabel('t', fontsize=16)
+    ax[2].legend(loc='best', fontsize=16)
+    [ax[i].tick_params(labelsize=16) for i in range(3)]
 
 
 
