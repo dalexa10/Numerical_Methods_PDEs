@@ -147,7 +147,7 @@ def Sod_Exact_solution(x, T, gam=7/5):
     return u_vec
 
 # -----------------------------------------------------
-#     Coefficients for WENO squeme for p = 2 & p = 3
+#     Coefficients for WENO scheme for p = 2 & p = 3
 # -----------------------------------------------------
 def cr_coefficients(p):
     if p == 2:
@@ -194,6 +194,11 @@ def flux_fun(u_vec):
                     (E + P) * rho_u / rho))
     return f_u
 
+def compute_LF_flux(u_minus, u_plus, alpha_LF):
+    """ Computes the Lax-Friedrich flux value """
+    flux = 0.5 * (flux_fun(u_minus) + flux_fun(u_plus)) - 0.5 * alpha_LF * (u_plus - u_minus)
+    return flux
+
 def compute_eigenvalues(u_vec, gam=7/5):
     """ Compute the eigenvalues of the mass matrix of the hyperbolic system
     of the 1D Euler equations """
@@ -224,16 +229,28 @@ def compute_polynomials(u_vec, p, side):
     """
     c_rj = cr_coefficients(p)
     global K, Km2, Km1, Kp2, Kp1
-    if side == 'right':
-        p0 = c_rj[1, 0] * u_vec[:, K] + c_rj[1, 1] * u_vec[:, Kp1] + c_rj[1, 2] * u_vec[:, Kp2]
-        p1 = c_rj[2, 0] * u_vec[:, Km1] + c_rj[2, 1] * u_vec[:, K] + c_rj[2, 2] * u_vec[:, Kp1]
-        p2 = c_rj[3, 0] * u_vec[:, Km2] + c_rj[3, 1] * u_vec[:, Km1] + c_rj[3, 2] * u_vec[:, K]
-    else:
-        p0 = c_rj[0, 0] * u_vec[:, K] + c_rj[0, 1] * u_vec[:, Kp1] + c_rj[0, 2] * u_vec[:, Kp2]
-        p1 = c_rj[1, 0] * u_vec[:, Km1] + c_rj[1, 1] * u_vec[:, K] + c_rj[1, 2] * u_vec[:, Kp1]
-        p2 = c_rj[2, 0] * u_vec[:, Km2] + c_rj[2, 1] * u_vec[:, Km1] + c_rj[2, 2] * u_vec[:, K]
 
-    return p0, p1, p2
+    if p == 2:
+        if side == 'right':
+            p0 = c_rj[1, 0] * u_vec[:, K] + c_rj[1, 1] * u_vec[:, Kp1]
+            p1 = c_rj[2, 0] * u_vec[:, Km1] + c_rj[2, 1] * u_vec[:, K]
+        else:
+            p0 = c_rj[0, 0] * u_vec[:, K] + c_rj[0, 1] * u_vec[:, Kp1]
+            p1 = c_rj[1, 0] * u_vec[:, Km1] + c_rj[1, 1] * u_vec[:, K]
+
+        return p0, p1
+
+    else:
+        if side == 'right':
+            p0 = c_rj[1, 0] * u_vec[:, K] + c_rj[1, 1] * u_vec[:, Kp1] + c_rj[1, 2] * u_vec[:, Kp2]
+            p1 = c_rj[2, 0] * u_vec[:, Km1] + c_rj[2, 1] * u_vec[:, K] + c_rj[2, 2] * u_vec[:, Kp1]
+            p2 = c_rj[3, 0] * u_vec[:, Km2] + c_rj[3, 1] * u_vec[:, Km1] + c_rj[3, 2] * u_vec[:, K]
+        else:
+            p0 = c_rj[0, 0] * u_vec[:, K] + c_rj[0, 1] * u_vec[:, Kp1] + c_rj[0, 2] * u_vec[:, Kp2]
+            p1 = c_rj[1, 0] * u_vec[:, Km1] + c_rj[1, 1] * u_vec[:, K] + c_rj[1, 2] * u_vec[:, Kp1]
+            p2 = c_rj[2, 0] * u_vec[:, Km2] + c_rj[2, 1] * u_vec[:, Km1] + c_rj[2, 2] * u_vec[:, K]
+
+        return p0, p1, p2
 
 def compute_beta(u_vec, p):
     """ Calculate smoothness indicators beta """
@@ -281,7 +298,64 @@ def compute_weights(u_vec, p, eps, side):
 
         return w
 
+# -----------------------------------------------------
+#                   WENO3 - RK2
+# -----------------------------------------------------
+def WENO3(u_vec, eps, p=2):
+    """
+    WENO scheme computes:
+        u_hat_minus
+        u_hat_plus
+        for a third order polynomial (p = 3)
+    """
+    global K, Km2, Km1, Kp2, Kp1
 
+    # ------ \hat_{u}_{k + 1/2} ---------
+    p0_r, p1_r = compute_polynomials(u_vec, p, side='right')
+    w0_r, w1_r = compute_weights(u_vec, p, eps, side='right')
+    u_hat_plus = w0_r * p0_r + w1_r * p1_r
+
+    # ------ \hat_{u}_{k + 1 - 1/2} --------
+    u_vec_kp1 = u_vec[:, Kp1]  # Roll u_vec plus 1
+    p0_l, p1_l = compute_polynomials(u_vec_kp1, p, side='left')
+    w0_l, w1_l = compute_weights(u_vec_kp1, p, eps, side='left')
+    u_hat_minus = w0_l * p0_l + w1_l * p1_l
+    return u_hat_minus, u_hat_plus
+
+
+def RK2_Integration(u_vec, ht, p, eps):
+    """ Three-stage Runge-Kutta integration of constructed u vectors """
+    global Km1, Km2, K, Kp1, Kp2
+
+    # --------- First stage -----------
+    u_hat_minus_1, u_hat_plus_1 = WENO3(u_vec, eps)
+    u_v_minus_1 = u_hat_plus_1
+    u_v_plus_1 = u_hat_minus_1
+    lamb_v_minus_1, lamb_v_plus_1 = compute_eigenvalues(u_v_minus_1), compute_eigenvalues(u_v_plus_1)
+    alfa_LF_1 = compute_alfa_LF(lamb_v_minus_1, lamb_v_plus_1)
+    flux_1 = compute_LF_flux(u_v_minus_1, u_v_plus_1, alfa_LF_1)
+    u_vec_1 = u_vec - (ht / hx) * (flux_1[:, K] - flux_1[:, Km1])
+    u_vec_1 = add_BC_conditions_to_ghost_cells(u_vec_1, p)
+
+    # --------- Second stage -----------
+    u_hat_minus_2, u_hat_plus_2 = WENO5(u_vec_1, eps)
+    u_v_minus_2 = u_hat_plus_2
+    u_v_plus_2 = u_hat_minus_2
+    lamb_v_minus_2, lamb_v_plus_2 = compute_eigenvalues(u_v_minus_2), compute_eigenvalues(u_v_plus_2)
+    alfa_LF_2 = compute_alfa_LF(lamb_v_minus_2, lamb_v_plus_2)
+    flux_2 = compute_LF_flux(u_v_minus_2, u_v_plus_2, alfa_LF_2)
+    u_vec_2 = 0.5 * u_vec + 0.5 * u_vec_1 - 0.5 * (ht / hx) * (flux_2[:, K] - flux_2[:, Km1])
+    u_vec_2 = add_BC_conditions_to_ghost_cells(u_vec_2, p)
+
+    u_vec = u_vec_2
+    P_vec = compute_pressure(u_vec[0, :], u_vec[1, :], u_vec[2, :])
+
+    return u_vec, P_vec
+
+
+# -----------------------------------------------------
+#                   WENO5 - RK3
+# -----------------------------------------------------
 def WENO5(u_vec, eps, p=3):
     """
     WENO scheme computes:
@@ -303,10 +377,6 @@ def WENO5(u_vec, eps, p=3):
     u_hat_minus = w0_l * p0_l + w1_l * p1_l + w2_l * p2_l
     return u_hat_minus, u_hat_plus
 
-def compute_LF_flux(u_minus, u_plus, alpha_LF):
-    """ Computes the Lax-Friedrich flux value """
-    flux = 0.5 * (flux_fun(u_minus) + flux_fun(u_plus)) - 0.5 * alpha_LF * (u_plus - u_minus)
-    return flux
 
 def RK3_Integration(u_vec, ht, p, eps):
     """ Three-stage Runge-Kutta integration of constructed u vectors """
@@ -348,77 +418,126 @@ def RK3_Integration(u_vec, ht, p, eps):
     return u_vec, P_vec
 
 
+# -----------------------------------------------------
+#                   Aux. Functions
+# -----------------------------------------------------
+def get_mark(k):
+    p = int(k[-1])
+    if p == 2:
+        m = 'v'
+    else:
+        m = 's'
+    return m
+
 
 if __name__ == '__main__':
+
     import matplotlib.pyplot as plt
+    from itertools import cycle
+
 
     # -------------------------------------
     #               User Inputs
     # --------------------------------------
-    nx = 500        # Discretization nodes in x
-    gam = 7/5       # Specific heat ratio
-    CFL = 0.5       # CFL condition
-    T = 0.2         # Final time of the simulation
-    p = 3           # Degree of interpolating polynomial
+    nx_ls = [100, 500]  # Discretization nodes in x
+    gam = 7/5           # Specific heat ratio
+    CFL = 0.5           # CFL condition
+    T = 0.2             # Final time of the simulation
     eps = 1e-6
 
     # -------------------------------------
     #               Processing
     # --------------------------------------
-    x, hx = np.linspace(0, 1, nx, endpoint=True, retstep=True)
-    u_vec, P_vec = initial_fun(x)
-    u_vec_0, P_vec_0 = u_vec.copy(), P_vec.copy()
-    l_v = compute_eigenvalues(u_vec)
-    max_l_0 = compute_lambda_max(l_v)
-    ht = CFL * hx / max_l_0
+    out = {}
 
-    # Indexes arrays
-    K = np.arange(0, nx)    # 0, ..., nx-1
-    Km1 = np.roll(K, 1)     # nx-1, 0, 1, ..., nx-2
-    Km2 = np.roll(K, 2)     # nx-2, 0, 1, ..., nx-3
-    Kp1 = np.roll(K, -1)    # 1, ..., nx
-    Kp2 = np.roll(K, -2)    # 2, ..., nx + 1
+    for nx in nx_ls:
+        x, hx = np.linspace(0, 1, nx, endpoint=True, retstep=True)
+        u_vec, P_vec = initial_fun(x)
+        u_vec_0, P_vec_0 = u_vec.copy(), P_vec.copy()
+        u_vec_2, P_vec_2 = u_vec.copy(), P_vec.copy()
 
-    # -------------------------------------
-    #               Computation
-    # --------------------------------------
-    t_c = 0
-    while t_c < T:
-        # Tensor update
-        u_vec, P_vec = RK3_Integration(u_vec, ht, p, eps)
+        l_v = compute_eigenvalues(u_vec)
+        max_l_0 = compute_lambda_max(l_v)
+        ht = CFL * hx / max_l_0
+        ht_2 = ht.copy()
 
-        # Time update
-        t_c += ht
+        # Indexes arrays
+        K = np.arange(0, nx)    # 0, ..., nx-1
+        Km1 = np.roll(K, 1)     # nx-1, 0, 1, ..., nx-2
+        Km2 = np.roll(K, 2)     # nx-2, 0, 1, ..., nx-3
+        Kp1 = np.roll(K, -1)    # 1, ..., nx
+        Kp2 = np.roll(K, -2)    # 2, ..., nx + 1
 
-        # Dynamic time step
-        l_v = compute_eigenvalues(u_vec, P_vec)
-        max_l = compute_lambda_max(l_v)
-        ht = CFL * hx / max_l
+        # -------------------------------------
+        #               Computation
+        # --------------------------------------
+        t_c = 0
+        t_c_2 = 0
+        p_w5 = 3  # Degree of interpolating polynomial
+        p_w3 = 2  # Degree of interpolating polynomial
 
-    u_vec_ex = Sod_Exact_solution(x, T)
+        while t_c < T:
+            # Tensor update
+            u_vec, P_vec = RK3_Integration(u_vec, ht, p_w5, eps)
+
+            # Time update
+            t_c += ht
+
+            # Dynamic time step
+            l_v = compute_eigenvalues(u_vec, P_vec)
+            max_l = compute_lambda_max(l_v)
+            ht = CFL * hx / max_l
+
+        k1 = str(nx) + '_' + str(p_w5)
+        out[k1] = {'u': u_vec,
+                   'P': P_vec,
+                   'x': x}
+
+        while t_c_2 < T:
+            # Tensor update
+            u_vec_2, P_vec_2 = RK2_Integration(u_vec_2, ht, p_w3, eps)
+
+            # Time update
+            t_c_2 += ht_2
+
+            # Dynamic time step
+            l_v_2 = compute_eigenvalues(u_vec_2, P_vec_2)
+            max_l_2 = compute_lambda_max(l_v_2)
+            ht_2 = CFL * hx / max_l_2
+
+        k2 = str(nx) + '_' + str(p_w3)
+        out[k2] = {'u': u_vec_2,
+                   'P': P_vec_2,
+                   'x': x}
+
+    x_ex = np.linspace(0, 1, 500, endpoint=True)
+    u_vec_ex = Sod_Exact_solution(x_ex, T)
+    P_vec_ex = compute_pressure(u_vec_ex[0, :], u_vec_ex[1, :], u_vec_ex[2, :])
 
     fig, ax = plt.subplots(2, 2)
     plt.tight_layout()
+    cycol = cycle('bgrc')
 
-    ax[0, 0].plot(x, u_vec_0[0, :], c='g', label='T = {}'.format(0))
-    ax[0, 0].plot(x, u_vec_ex[0, :], c='r', label='T = {}'.format(str(T)))
-    ax[0, 0].plot(x, u_vec[0, :], c='b', ls='--', label='T = {}'.format(str(T)))
-    ax[0, 0].set_ylabel(r'$\rho$')
+    ax[0, 0].plot(x_ex, u_vec_ex[0, :], ls='--', lw=1, c='r')
+    ax[0, 1].plot(x_ex, u_vec_ex[1, :] / u_vec_ex[0, :], ls='--', lw=1, c='r')
+    ax[1, 0].plot(x_ex, u_vec_ex[2, :], ls='--', lw=1, c='r')
+    ax[1, 1].plot(x_ex, P_vec_ex, c='r', ls='--', lw=1, label='Exact')
 
-    ax[0, 1].plot(x, u_vec[1, :] / u_vec[0, :], c='b', label='T = {}'.format(str(T)))
-    ax[0, 1].plot(x, u_vec_0[1, :] / u_vec_0[0, :], c='g', label='T = {}'.format(0))
-    ax[0, 1].set_ylabel('u')
+    for k in out.keys():
+        c = next(cycol)
+        m = get_mark(k)
+        ax[0, 0].scatter(out[k]['x'], out[k]['u'][0, :], marker=m, c=c, s=5)
+        ax[0, 1].scatter(out[k]['x'], out[k]['u'][1, :] / out[k]['u'][0, :], marker=m, c=c, s=5)
+        ax[1, 0].scatter(out[k]['x'], out[k]['u'][2, :], marker=m, c=c, s=5)
+        ax[1, 1].scatter(out[k]['x'], out[k]['P'], marker=m, c=c, s=5,
+                         label=r'$n_x$ = {} - p = {}'.format(k[:3], k[-1]))
 
-    ax[1, 0].plot(x, u_vec[2, :], c='b', label='T = {}'.format(str(T)))
-    ax[1, 0].plot(x, u_vec_0[2, :], c='g', label='T = {}'.format(0))
-    ax[1, 0].set_xlabel('x')
-    ax[1, 0].set_ylabel('E')
-
-    ax[1, 1].plot(x, P_vec, c='b', label='T = {}'.format(str(T)))
-    ax[1, 1].plot(x, P_vec_0, c='g', label='T = {}'.format(0))
-    ax[1, 1].set_xlabel('x')
-    ax[1, 1].set_ylabel('P')
-    ax[1, 1].legend(loc='best')
+    ax[0, 0].set_ylabel(r'$\rho$', fontsize=16)
+    ax[0, 1].set_ylabel('u', fontsize=16)
+    ax[1, 0].set_xlabel('x', fontsize=16)
+    ax[1, 0].set_ylabel('E', fontsize=16)
+    ax[1, 1].legend(loc='best', fontsize=16)
+    [ax[i, j].tick_params(labelsize=16) for i in range(2) for j in range(2)]
 
 
 
