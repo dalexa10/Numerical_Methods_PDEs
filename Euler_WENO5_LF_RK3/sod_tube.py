@@ -4,6 +4,7 @@ __author__ = 'Elena Fernandez'
 import numpy as np
 from scipy.optimize import fsolve
 from sklearn.metrics import mean_squared_error
+from matplotlib import ticker
 
 # -----------------------------------------------------
 #               Thermodynamic functions
@@ -439,6 +440,14 @@ def compute_error(u_num, u_exact, hx):
            mean_squared_error(u_exact[2, :], u_num[2, :])]
     return mse
 
+def formater_scientific(ax):
+    """ Formats the axis in scientific notation """
+    formatter = ticker.ScalarFormatter(useMathText=True)
+    formatter.set_scientific(True)
+    formatter.set_powerlimits((-1, 1))
+    ax.yaxis.get_offset_text().set_fontsize(14)
+    return ax.yaxis.set_major_formatter(formatter)
+
 
 if __name__ == '__main__':
 
@@ -612,6 +621,8 @@ if __name__ == '__main__':
 
     fig, ax = plt.subplots(1, 3)
     plt.tight_layout()
+    plt.ticklabel_format(axis="y", style="sci")
+
     for k in error_dict.keys():
         ax[0].plot(error_dict[k]['t'], error_dict[k]['e'][0])
         ax[1].plot(error_dict[k]['t'], error_dict[k]['e'][1])
@@ -625,6 +636,8 @@ if __name__ == '__main__':
     ax[1].set_xlabel('t', fontsize=16)
     ax[2].set_xlabel('t', fontsize=16)
     ax[2].legend(loc='best', fontsize=16)
+    [ax[i].tick_params(labelsize=16) for i in range(3)]
+    [formater_scientific(ax[i]) for i in range(3)]
 
 
 # %%
