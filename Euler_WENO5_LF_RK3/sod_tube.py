@@ -445,6 +445,10 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     from itertools import cycle
 
+    import matplotlib
+    matplotlib.rcParams['animation.embed_limit'] = 2**28
+    from matplotlib import animation
+
 
     # -------------------------------------
     #               User Inputs
@@ -454,12 +458,15 @@ if __name__ == '__main__':
     CFL = 0.5           # CFL condition
     T = 0.2             # Final time of the simulation
     eps = 1e-6
+    anim = True
 
     # -------------------------------------
     #               Processing
     # --------------------------------------
     out = {}
     error_dict = {}
+    if anim:
+        out_an = {}
 
     for nx in nx_ls:
         x, hx = np.linspace(0, 1, nx, endpoint=True, retstep=True)
@@ -493,17 +500,35 @@ if __name__ == '__main__':
         error_dict[k1] = {'t': [], 'e': [[], [], []]}
         error_dict[k2] = {'t': [], 'e': [[], [], []]}
 
+        out_an[k1] = {'t': [],
+                      'u_ex': [[], [], []],
+                      'u': [[], [], []]}
+
+        out_an[k2] = {'t': [],
+                      'u_ex': [[], [], []],
+                      'u': [[], [], []]}
+
+        # -------------------------------------
+        #              WENO5 - RK3
+        # --------------------------------------
+
         while t_c < T:
             # Numerical tensor update
             u_vec, P_vec = RK3_Integration(u_vec, ht, p_w5, eps)
 
             # Exact solution
-            u_vec_ex = Sod_Exact_solution(x, ht)
+            u_vec_ex = Sod_Exact_solution(x, t_c)
 
             # Error calculation
             e_i = compute_error(u_vec, u_vec_ex, hx)
             [error_dict[k1]['e'][i].append(e_i[i]) for i in range(3)]
             error_dict[k1]['t'].append(t_c)
+
+            # Animation section
+            if anim:
+                out_an[k1]['t'].append(t_c_2)
+                [out_an[k1]['u_ex'][i].append(u_vec_ex[i]) for i in range(3)]
+                [out_an[k1]['u'][i].append(u_vec[i]) for i in range(3)]
 
             # Time update
             t_c += ht
@@ -517,17 +542,27 @@ if __name__ == '__main__':
                    'P': P_vec,
                    'x': x}
 
+        # -------------------------------------
+        #              WENO3 - RK2
+        # --------------------------------------
+
         while t_c_2 < T:
             # Tensor update
             u_vec_2, P_vec_2 = RK2_Integration(u_vec_2, ht, p_w3, eps)
 
-            # Exact solution
-            u_vec_ex_2 = Sod_Exact_solution(x, ht)
+            # Animation section
+            u_vec_ex_2 = Sod_Exact_solution(x, t_c_2)
 
             # Error calculation
             e_i_2 = compute_error(u_vec_2, u_vec_ex_2, hx)
             [error_dict[k2]['e'][i].append(e_i_2[i]) for i in range(3)]
             error_dict[k2]['t'].append(t_c_2)
+
+            # Animation section
+            if anim:
+                out_an[k2]['t'].append(t_c_2)
+                [out_an[k2]['u_ex'][i].append(u_vec_ex_2[i]) for i in range(3)]
+                [out_an[k2]['u'][i].append(u_vec_2[i]) for i in range(3)]
 
             # Time update
             t_c_2 += ht_2
@@ -544,6 +579,10 @@ if __name__ == '__main__':
     x_ex = np.linspace(0, 1, 500, endpoint=True)
     u_vec_ex = Sod_Exact_solution(x_ex, T)
     P_vec_ex = compute_pressure(u_vec_ex[0, :], u_vec_ex[1, :], u_vec_ex[2, :])
+
+    # -------------------------------------
+    #               Plotting
+    # --------------------------------------
 
     fig, ax = plt.subplots(2, 2)
     plt.tight_layout()
@@ -584,11 +623,87 @@ if __name__ == '__main__':
 
     ax[0].set_xlabel('t', fontsize=16)
     ax[1].set_xlabel('t', fontsize=16)
-    ax[1].set_xlabel('t', fontsize=16)
+    ax[2].set_xlabel('t', fontsize=16)
     ax[2].legend(loc='best', fontsize=16)
-    [ax[i].tick_params(labelsize=16) for i in range(3)]
 
 
+# %%
+
+    # -------------------------------------
+    #               Animation
+    # --------------------------------------
+
+    fig, ax = plt.subplots(1, 3, figsize=(10, 3))
+    [ax[i].set_box_aspect(1) for i in range(3)]
+    plt.tight_layout()
+
+    # -------------------------------------
+    #              WENO5 - RK3
+    # --------------------------------------
+    u_vec_ex_an = out_an['100_3']['u_ex']
+    u_vec_num_an = out_an['100_3']['u']
+
+    rho_ex_an, rho_u_ex_an, E_ex_an = [np.array(u_vec_ex_an[j]) for j in range(3)]
+    u_ex_an = rho_u_ex_an / rho_ex_an
+
+    rho_an, rho_u_an, E_an = [np.array(u_vec_num_an[j]) for j in range(3)]
+    u_an = rho_u_an / rho_an
+
+    x_an = np.linspace(0, 1, rho_an.shape[1], endpoint=True)
+
+    # -------------------------------------
+    #              WENO3 - RK2
+    # --------------------------------------
+    u_vec_ex_an_2 = out_an['100_2']['u_ex']
+    u_vec_num_an_2 = out_an['100_2']['u']
+
+    rho_ex_an_2, rho_u_ex_an_2, E_ex_an_2 = [np.array(u_vec_ex_an_2[j]) for j in range(3)]
+    u_ex_an_2 = rho_u_ex_an_2 / rho_ex_an_2
+
+    rho_an_2, rho_u_an_2, E_an_2 = [np.array(u_vec_num_an_2[j]) for j in range(3)]
+    u_an_2 = rho_u_an_2 / rho_an_2
+
+    x_an_2 = np.linspace(0, 1, rho_an_2.shape[1], endpoint=True)
+
+    line0, = ax[0].plot(x_an, rho_ex_an[0, :], c='red', lw=2, clip_on=False)
+    line1, = ax[0].plot(x_an, rho_an[0, :], c='blue', lw=2, clip_on=False)
+    line2, = ax[0].plot(x_an_2, rho_an_2[0, :], c='green', lw=2, clip_on=False)
+
+    ax[1].set_ylim([- 0.1, np.max(u_ex_an) + 0.1])
+    line3, = ax[1].plot(x_an, u_ex_an[0, :], c='red', lw=2, clip_on=False)
+    line4, = ax[1].plot(x_an, u_an[0, :], c='blue', lw=2, clip_on=False)
+    line5, = ax[1].plot(x_an_2, u_an_2[0, :], c='green', lw=2, clip_on=False)
+
+    line6, = ax[2].plot(x_an, E_ex_an[0, :], c='red', lw=2, clip_on=False, label='Exact Solution')
+    line7, = ax[2].plot(x_an, E_an[0, :], c='blue', lw=2, clip_on=False, label=r'$n_{x} = 100, p = 3$')
+    line8, = ax[2].plot(x_an_2, E_an_2[0, :], c='green', lw=2, clip_on=False, label=r'$n_{x} = 100, p = 2$')
+
+    ax[2].legend(loc='upper left')
+
+    def init():
+        pass
+    def time_stepper(n):
+        line0.set_data(x_an, rho_ex_an[n, :])
+        line1.set_data(x_an, rho_an[n, :])
+        line2.set_data(x_an_2, rho_an_2[n, :])
+
+        line3.set_data(x_an, u_ex_an[n, :])
+        line4.set_data(x_an, u_an[n, :])
+        line5.set_data(x_an_2, u_an_2[n, :])
+
+        line6.set_data(x_an, E_ex_an[n, :])
+        line7.set_data(x_an, E_an[n, :])
+        line8.set_data(x_an_2, E_an_2[n, :])
+
+        return line0, line1, line2, line3, line4, line5, line6, line7, line8
+
+    nt_an = rho_an_2.shape[0]  # Set this value as the lowest size (in time) between the vectors you want to animate
+    # In this case rho_an_2.shape[0] = 59 and rho_an.shape[0] = 60
+
+    ani = animation.FuncAnimation(fig, time_stepper,
+                                  frames=nt_an, interval=30,
+                                  init_func=init)
+    ani.save('anim.gif', writer='PillowWriter', fps=30)
 
 
 
