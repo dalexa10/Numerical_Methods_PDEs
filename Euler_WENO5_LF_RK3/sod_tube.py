@@ -464,7 +464,7 @@ if __name__ == '__main__':
     # --------------------------------------
     nx_ls = [100, 500]  # Discretization nodes in x
     gam = 7/5           # Specific heat ratio
-    CFL = 0.5           # CFL condition
+    CFL = 0.8           # CFL condition
     T = 0.2             # Final time of the simulation
     eps = 1e-6
     anim = True
@@ -651,6 +651,14 @@ if __name__ == '__main__':
     fig, ax = plt.subplots(1, 3, figsize=(12, 4.5))
     [ax[i].set_box_aspect(1) for i in range(3)]
     plt.tight_layout()
+
+    ax[0].set_xlabel('x')
+    ax[1].set_xlabel('x')
+    ax[2].set_xlabel('x')
+
+    ax[0].set_ylabel(r'$\rho$')
+    ax[1].set_ylabel('u')
+    ax[2].set_ylabel('E')
 
     # -------------------------------------
     #              WENO5 - RK3
