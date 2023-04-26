@@ -594,8 +594,8 @@ if __name__ == '__main__':
     # --------------------------------------
 
     fig, ax = plt.subplots(2, 2)
-    plt.tight_layout()
     cycol = cycle('bgrc')
+    plt.tight_layout()
 
     ax[0, 0].plot(x_ex, u_vec_ex[0, :], ls='--', lw=1, c='r')
     ax[0, 1].plot(x_ex, u_vec_ex[1, :] / u_vec_ex[0, :], ls='--', lw=1, c='r')
@@ -605,22 +605,23 @@ if __name__ == '__main__':
     for k in out.keys():
         c = next(cycol)
         m = get_mark(k)
-        ax[0, 0].scatter(out[k]['x'], out[k]['u'][0, :], marker=m, c=c, s=5)
-        ax[0, 1].scatter(out[k]['x'], out[k]['u'][1, :] / out[k]['u'][0, :], marker=m, c=c, s=5)
-        ax[1, 0].scatter(out[k]['x'], out[k]['u'][2, :], marker=m, c=c, s=5)
-        ax[1, 1].scatter(out[k]['x'], out[k]['P'], marker=m, c=c, s=5,
+        ax[0, 0].scatter(out[k]['x'], out[k]['u'][0, :], marker=m, c=c, s=7)
+        ax[0, 1].scatter(out[k]['x'], out[k]['u'][1, :] / out[k]['u'][0, :], marker=m, c=c, s=7)
+        ax[1, 0].scatter(out[k]['x'], out[k]['u'][2, :], marker=m, c=c, s=7)
+        ax[1, 1].scatter(out[k]['x'], out[k]['P'], marker=m, c=c, s=7,
                          label=r'$n_x$ = {} - p = {}'.format(k[:3], k[-1]))
 
     ax[0, 0].set_ylabel(r'$\rho$', fontsize=16)
     ax[0, 1].set_ylabel('u', fontsize=16)
     ax[1, 0].set_xlabel('x', fontsize=16)
     ax[1, 0].set_ylabel('E', fontsize=16)
+    ax[1, 1].set_ylabel('P', fontsize=16)
+    ax[1, 1].set_xlabel('x', fontsize=16)
     ax[1, 1].legend(loc='best', fontsize=16)
     [ax[i, j].tick_params(labelsize=16) for i in range(2) for j in range(2)]
 
 
-    fig, ax = plt.subplots(1, 3)
-    plt.tight_layout()
+    fig, ax = plt.subplots(1, 3, figsize=(12, 4.5))
     plt.ticklabel_format(axis="y", style="sci")
 
     for k in error_dict.keys():
@@ -638,6 +639,7 @@ if __name__ == '__main__':
     ax[2].legend(loc='best', fontsize=16)
     [ax[i].tick_params(labelsize=16) for i in range(3)]
     [formater_scientific(ax[i]) for i in range(3)]
+    plt.tight_layout()
 
 
 # %%
@@ -646,7 +648,7 @@ if __name__ == '__main__':
     #               Animation
     # --------------------------------------
 
-    fig, ax = plt.subplots(1, 3, figsize=(10, 3))
+    fig, ax = plt.subplots(1, 3, figsize=(12, 4.5))
     [ax[i].set_box_aspect(1) for i in range(3)]
     plt.tight_layout()
 
@@ -691,7 +693,7 @@ if __name__ == '__main__':
     line7, = ax[2].plot(x_an, E_an[0, :], c='blue', lw=2, clip_on=False, label=r'$n_{x} = 100, p = 3$')
     line8, = ax[2].plot(x_an_2, E_an_2[0, :], c='green', lw=2, clip_on=False, label=r'$n_{x} = 100, p = 2$')
 
-    ax[2].legend(loc='upper left')
+    ax[2].legend(loc='lower left')
 
     def init():
         pass
